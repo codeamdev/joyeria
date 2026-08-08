@@ -73,30 +73,40 @@ adapters) · Auth.js v5 (credenciales) · Tailwind CSS v4 · Radix UI · dnd-kit
 - `src/app/(public)/*` — sitio público (inicio, catálogo, producto, historia,
   personalización, contacto).
 
-## Despliegue en el servidor Linux (PostgreSQL local)
+## Despliegue (servidor Linux compartido, sin Docker)
 
-1. **Base de datos**: crear el rol/DB como en el paso 2 de arriba, **sin**
-   `CREATEDB`. Configurar `pg_hba.conf` para exigir contraseña (`scram-sha-256`)
-   en conexiones locales, y backups periódicos (`pg_dump` vía cron — no hay
-   redundancia gestionada al ser una base local).
+Desplegado en `/srv/joyeria`, sin contenedores, siguiendo el mismo patrón de
+carpetas/git que los demás proyectos del servidor pero con proceso systemd
+directo (decisión explícita: sin Docker).
 
-2. **Variables de entorno**: `DATABASE_URL`, `AUTH_SECRET`, `UPLOADS_DIR`
-   (ej. `/var/lib/joyeria/uploads`, con permisos del usuario que corre la app) y
-   `AUTH_URL=https://tu-dominio.com` — con URL en `https`, Auth.js activa
-   automáticamente la cookie de sesión `Secure`.
+1. **Base de datos**: rol `joyeria_app` + DB `joyeria` en el PostgreSQL local
+   del servidor (puerto 5432, ya usado por otros proyectos), **sin**
+   `CREATEDB` — las migraciones en producción usan `prisma migrate deploy`
+   (no necesita shadow database).
 
-3. **Build y arranque**:
+2. **Código**: `git clone` del repo en `/srv/joyeria` (usuario dedicado
+   `joyeria`, sin privilegios de root, dueño de esa carpeta y de
+   `/srv/joyeria-uploads`, que vive **fuera** del árbol de la app).
 
-   ```bash
-   npm ci
-   npx prisma migrate deploy
-   npm run build
-   npm run start   # o gestionado con systemd/PM2
-   ```
+3. **Variables de entorno**: `/srv/joyeria/.env.production` (600, dueño
+   `joyeria`) — copiar también a `.env` porque `prisma.config.ts` sólo
+   autocarga ese nombre. Incluye `DATABASE_URL`, `AUTH_SECRET`, `UPLOADS_DIR`,
+   `AUTH_URL`, `PORT`.
 
-4. **Reverse proxy (nginx)**: terminar TLS ahí y hacer proxy a `127.0.0.1:3000`.
-   Si se suben videos grandes al hero, subir `client_max_body_size` en nginx
-   (los Route Handlers de Next no imponen un límite propio, pero el proxy sí).
+4. **Proceso**: `systemd` (`/etc/systemd/system/joyeria.service`), corriendo
+   como el usuario `joyeria`, con `ExecStart=next start -H 127.0.0.1 -p 3003`
+   — el puerto **nunca** se expone directamente (además de no ser necesario,
+   el firewall del proveedor cloud sólo permite 22/80/443 sin importar `ufw`).
+   Sandboxing básico: `ProtectSystem=strict`, `NoNewPrivileges=true`,
+   `ReadWritePaths` limitado a uploads y `.next/cache`.
 
-5. **Proceso persistente**: usar systemd o PM2 para reiniciar la app si cae, y
-   habilitarlo en el arranque del servidor.
+5. **Nginx**: bloque en `/etc/nginx/sites-available/joyeria` con
+   `server_name` igual a la IP del servidor (coincidencia exacta, no
+   interfiere con los `server_name` por dominio de otros sitios), proxy a
+   `127.0.0.1:3003`. Mientras no haya dominio propio queda en HTTP plano —
+   con dominio, agregar bloque HTTPS vía certbot y redirigir 80→443 (y
+   entonces si `AUTH_URL` pasa a `https://`, Auth.js activa la cookie
+   `Secure` automáticamente).
+
+6. **Redeploy**: `bash /srv/joyeria/deploy.sh` (git pull + npm ci + prisma
+   migrate deploy + build + `systemctl restart joyeria`).
