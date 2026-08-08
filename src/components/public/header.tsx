@@ -40,11 +40,14 @@ export function Header() {
           </nav>
 
           <Link
-            href="/admin/login"
-            className="hidden items-center gap-1 text-xs text-ink/35 transition hover:text-ink/70 md:inline-flex"
+            href="/admin"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Panel de administración"
+            title="Panel de administración"
+            className="hidden text-ink/35 transition hover:text-ink/70 md:inline-flex"
           >
-            <Lock size={12} />
-            Admin
+            <Lock size={16} />
           </Link>
 
           <button
@@ -71,12 +74,14 @@ export function Header() {
             </Link>
           ))}
           <Link
-            href="/admin/login"
+            href="/admin"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Panel de administración"
             onClick={() => setOpen(false)}
-            className="mt-1 inline-flex items-center gap-1 border-t border-ink/10 pt-3 text-xs text-ink/35"
+            className="mt-1 inline-flex border-t border-ink/10 pt-3 text-ink/35"
           >
-            <Lock size={12} />
-            Admin
+            <Lock size={16} />
           </Link>
         </nav>
       ) : null}
